@@ -8,7 +8,7 @@ Hooks into `message:enrich` to inject the user's current location as contextual 
 
 ## Setup
 
-1. Copy or symlink to `~/.mindroom-chat/plugins/location-enrich`
+1. Copy or symlink to `~/.mindroom/plugins/location-enrich`
 2. Add to `config.yaml`:
    ```yaml
    plugins:
