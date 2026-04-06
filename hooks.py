@@ -15,8 +15,8 @@ from pydantic import AliasChoices, BaseModel, ConfigDict, Field, ValidationError
 from mindroom.constants import resolve_config_relative_path
 from mindroom.hooks import EnrichmentItem, MessageEnrichContext, hook
 
-DEFAULT_DAWARICH_URL = "https://dawarich.lab.nijho.lt"
-DEFAULT_PLACES_PATH = Path.home() / ".mindroom-chat/mindroom_data/agents/openclaw/workspace/memory/facts/locations.yaml"
+DEFAULT_DAWARICH_URL = "http://localhost:3000"
+DEFAULT_PLACES_PATH = Path.home() / ".mindroom/plugins/location-enrich/places.yaml"
 HTTP_TIMEOUT_SECONDS = 5.0
 STALE_AFTER_SECONDS = 30 * 60
 NEARBY_THRESHOLD_M = 500.0
