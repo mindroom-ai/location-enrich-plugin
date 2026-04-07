@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import math
 import os
+import time
 from datetime import UTC, datetime
 from pathlib import Path
+from dataclasses import dataclass
 from typing import Any
 
 import httpx
@@ -17,10 +19,27 @@ from mindroom.hooks import EnrichmentItem, MessageEnrichContext, hook
 
 DEFAULT_DAWARICH_URL = "http://localhost:3000"
 DEFAULT_PLACES_PATH = Path.home() / ".mindroom/plugins/location-enrich/places.yaml"
-HTTP_TIMEOUT_SECONDS = 5.0
+HTTP_TIMEOUT_SECONDS = 1.0
+LATEST_FIX_CACHE_TTL_SECONDS = 15.0
 STALE_AFTER_SECONDS = 30 * 60
 NEARBY_THRESHOLD_M = 500.0
 AT_HOME_THRESHOLD_M = 200.0
+
+
+@dataclass(slots=True)
+class _LatestFixCacheEntry:
+    fetched_at_monotonic: float
+    fix: LocationFix | None
+
+
+@dataclass(slots=True)
+class _KnownPlacesCacheEntry:
+    file_mtime: float
+    places: list[KnownPlace]
+
+
+_LATEST_FIX_CACHE: dict[tuple[str, str], _LatestFixCacheEntry] = {}
+_KNOWN_PLACES_CACHE: dict[Path, _KnownPlacesCacheEntry] = {}
 
 
 class KnownPlace(BaseModel):
@@ -159,14 +178,25 @@ def resolve_places_path(ctx: MessageEnrichContext) -> Path:
 def load_known_places(path: Path) -> list[KnownPlace]:
     """Load known places from YAML."""
     try:
+        file_mtime = path.stat().st_mtime
+    except OSError:
+        return []
+
+    cached = _KNOWN_PLACES_CACHE.get(path)
+    if cached is not None and cached.file_mtime == file_mtime:
+        return cached.places
+
+    try:
         raw_data = yaml.safe_load(path.read_text(encoding="utf-8"))
     except (OSError, yaml.YAMLError):
         return []
 
     try:
-        return KnownPlacesDocument.model_validate(raw_data).locations
+        places = KnownPlacesDocument.model_validate(raw_data).locations
     except ValidationError:
         return []
+    _KNOWN_PLACES_CACHE[path] = _KnownPlacesCacheEntry(file_mtime=file_mtime, places=places)
+    return places
 
 
 def find_nearby_place(
@@ -258,18 +288,31 @@ def build_location_enrichment(
 
 async def fetch_latest_fix(api_key: str, *, dawarich_url: str = DEFAULT_DAWARICH_URL) -> LocationFix | None:
     """Fetch and parse the newest Dawarich point."""
+    cache_key = (api_key, dawarich_url.rstrip("/"))
+    now = time.monotonic()
+    cached = _LATEST_FIX_CACHE.get(cache_key)
+    if cached is not None and (now - cached.fetched_at_monotonic) < LATEST_FIX_CACHE_TTL_SECONDS:
+        return cached.fix
+
     url = f"{dawarich_url.rstrip('/')}/api/v1/points"
-    async with httpx.AsyncClient(timeout=HTTP_TIMEOUT_SECONDS) as client:
-        response = await client.get(url, params={"api_key": api_key, "per_page": 1})
-        response.raise_for_status()
+    try:
+        async with httpx.AsyncClient(timeout=HTTP_TIMEOUT_SECONDS) as client:
+            response = await client.get(url, params={"api_key": api_key, "per_page": 1})
+            response.raise_for_status()
+    except (httpx.HTTPError, ValueError):
+        if cached is not None and cached.fix is not None:
+            return cached.fix
+        raise
 
     try:
-        return DawarichLatestResponse.model_validate(response.json()).latest_fix
+        fix = DawarichLatestResponse.model_validate(response.json()).latest_fix
     except ValidationError:
-        return None
+        fix = None
+    _LATEST_FIX_CACHE[cache_key] = _LatestFixCacheEntry(fetched_at_monotonic=now, fix=fix)
+    return fix
 
 
-@hook(event="message:enrich", name="location-enrich")
+@hook(event="message:enrich", name="location-enrich", timeout_ms=1200)
 async def location_enrich(ctx: MessageEnrichContext) -> list[EnrichmentItem]:
     """Enrich inbound messages with the latest known location context."""
     api_key = os.getenv("DAWARICH_API_KEY", "").strip()
@@ -277,7 +320,6 @@ async def location_enrich(ctx: MessageEnrichContext) -> list[EnrichmentItem]:
         return []
 
     dawarich_url = _setting_str(ctx.settings, "dawarich_url") or os.getenv("DAWARICH_URL", DEFAULT_DAWARICH_URL)
-    places = load_known_places(resolve_places_path(ctx))
 
     try:
         fix = await fetch_latest_fix(api_key, dawarich_url=dawarich_url)
@@ -287,4 +329,5 @@ async def location_enrich(ctx: MessageEnrichContext) -> list[EnrichmentItem]:
 
     if fix is None:
         return []
+    places = load_known_places(resolve_places_path(ctx))
     return build_location_enrichment(fix=fix, places=places)
