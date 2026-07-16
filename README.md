@@ -78,6 +78,30 @@ Create a YAML file with your known locations:
 
 Each entry may also use `label` instead of `name`, and `lat` / `lon` instead of `latitude` / `longitude`.
 
+## Install
+
+Vendor this plugin with the MindRoom CLI:
+
+```bash
+mindroom plugins install location-enrich-plugin
+```
+
+Then reference it from `config.yaml`:
+
+```yaml
+plugins:
+  - path: plugins/location-enrich-plugin
+```
+
+Update to the latest commit later with:
+
+```bash
+mindroom plugins update location-enrich-plugin
+```
+
+The command pins the exact installed commit in `.mindroom-plugin.lock.json` and strictly validates the plugin before activating it.
+For a manual checkout instead, see Setup below.
+
 ## Setup
 
 1. Copy this plugin to `~/.mindroom/plugins/location-enrich`.
