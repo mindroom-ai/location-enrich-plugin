@@ -258,7 +258,7 @@ def build_location_enrichment(
         ]
         if home_distance_m is not None:
             lines.append(f"distance_from_home_m: {home_distance_m}")
-        return [EnrichmentItem(key="location", text="\n".join(lines))]
+        return [EnrichmentItem(key="location", text="\n".join(lines), persist=False)]
 
     movement_state = classify_movement(fix.velocity_mps)
     suggestion: str | None = None
@@ -283,7 +283,7 @@ def build_location_enrichment(
         lines.append(f"distance_from_home_m: {home_distance_m}")
     if suggestion is not None:
         lines.append(f"suggestion: {suggestion}")
-    return [EnrichmentItem(key="location", text="\n".join(lines))]
+    return [EnrichmentItem(key="location", text="\n".join(lines), persist=False)]
 
 
 async def fetch_latest_fix(api_key: str, *, dawarich_url: str = DEFAULT_DAWARICH_URL) -> LocationFix | None:
