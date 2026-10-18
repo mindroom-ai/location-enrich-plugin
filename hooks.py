@@ -258,32 +258,31 @@ def build_location_enrichment(
         ]
         if home_distance_m is not None:
             lines.append(f"distance_from_home_m: {home_distance_m}")
-        return [EnrichmentItem(key="location", text="\n".join(lines))]
+    else:
+        movement_state = classify_movement(fix.velocity_mps)
+        suggestion: str | None = None
+        if movement_state in {"driving", "highway"}:
+            suggestion = "User appears to be driving - prefer voice replies and keep text short"
+        elif movement_state in {"walking", "jogging"}:
+            suggestion = "User appears to be walking - keep replies concise"
 
-    movement_state = classify_movement(fix.velocity_mps)
-    suggestion: str | None = None
-    if movement_state in {"driving", "highway"}:
-        suggestion = "User appears to be driving - prefer voice replies and keep text short"
-    elif movement_state in {"walking", "jogging"}:
-        suggestion = "User appears to be walking - keep replies concise"
-
-    lines = [
-        "status: fresh",
-        f"latitude: {fix.latitude:.4f}",
-        f"longitude: {fix.longitude:.4f}",
-        f"velocity_mps: {fix.velocity_mps:.1f}",
-        f"movement_state: {movement_state}",
-        f"nearby_place: {nearby.place.name if nearby is not None else 'unknown'}",
-        f"at_home: {str(at_home).lower()}",
-        f"location_age_seconds: {age_s}",
-    ]
-    if fix.altitude_m is not None:
-        lines.append(f"altitude_m: {round(fix.altitude_m)}")
-    if home_distance_m is not None:
-        lines.append(f"distance_from_home_m: {home_distance_m}")
-    if suggestion is not None:
-        lines.append(f"suggestion: {suggestion}")
-    return [EnrichmentItem(key="location", text="\n".join(lines))]
+        lines = [
+            "status: fresh",
+            f"latitude: {fix.latitude:.4f}",
+            f"longitude: {fix.longitude:.4f}",
+            f"velocity_mps: {fix.velocity_mps:.1f}",
+            f"movement_state: {movement_state}",
+            f"nearby_place: {nearby.place.name if nearby is not None else 'unknown'}",
+            f"at_home: {str(at_home).lower()}",
+            f"location_age_seconds: {age_s}",
+        ]
+        if fix.altitude_m is not None:
+            lines.append(f"altitude_m: {round(fix.altitude_m)}")
+        if home_distance_m is not None:
+            lines.append(f"distance_from_home_m: {home_distance_m}")
+        if suggestion is not None:
+            lines.append(f"suggestion: {suggestion}")
+    return [EnrichmentItem(key="location", text="\n".join(lines), persist=False, minimal_required=True)]
 
 
 async def fetch_latest_fix(api_key: str, *, dawarich_url: str = DEFAULT_DAWARICH_URL) -> LocationFix | None:
