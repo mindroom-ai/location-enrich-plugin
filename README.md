@@ -29,6 +29,7 @@ Agents see where the user is, how recent that fix is, whether it matches a known
 2. It fetches the latest GPS fix from Dawarich using `DAWARICH_API_KEY`.
 3. The fix is compared against a local YAML file of known places such as home, office, or gym.
 4. The plugin injects a compact location summary into the prompt for the active turn.
+   The summary is not stored in session history, so earlier locations never reach later turns, memory, or the knowledge graph.
 5. If the fix is stale, the plugin marks it as stale instead of presenting it as live context.
 
 ## Hooks
