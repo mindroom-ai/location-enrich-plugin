@@ -55,6 +55,7 @@ def test_fresh_driving_fix_builds_home_aware_enrichment() -> None:
 
     assert item.key == "location"
     assert item.persist is False
+    assert item.minimal_required is True
     assert "status: fresh" in item.text
     assert "movement_state: driving" in item.text
     assert "nearby_place: Home" in item.text
@@ -76,6 +77,7 @@ def test_stale_fix_is_labeled_without_movement_advice() -> None:
     [item] = hooks.build_location_enrichment(fix=fix, places=[], now=now)
 
     assert item.persist is False
+    assert item.minimal_required is True
     assert "status: stale" in item.text
     assert "may be outdated" in item.text
     assert "movement_state" not in item.text
