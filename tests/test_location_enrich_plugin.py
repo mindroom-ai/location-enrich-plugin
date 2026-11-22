@@ -3,11 +3,14 @@
 
 from __future__ import annotations
 
+import asyncio
 import sys
+import time
 from datetime import UTC, datetime, timedelta
 from importlib import util
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -91,3 +94,55 @@ async def test_hook_without_api_key_performs_no_io(monkeypatch: pytest.MonkeyPat
     ctx = SimpleNamespace()
 
     assert await hooks.location_enrich(ctx) == []
+
+
+class _SlowAsyncClient:
+    def __init__(self, **_kwargs: object) -> None:
+        pass
+
+    async def __aenter__(self) -> _SlowAsyncClient:
+        return self
+
+    async def __aexit__(self, *_args: object) -> None:
+        return None
+
+    async def get(self, *_args: object, **_kwargs: object) -> object:
+        await asyncio.sleep(1.0)
+        raise AssertionError("Slow request should have timed out")
+
+
+@pytest.mark.asyncio
+async def test_fetch_deadline_returns_stale_cached_fix(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Exceeding the fetch deadline should fall back to an expired cached fix."""
+    stale_fix = hooks.LocationFix(latitude=37.7749, longitude=-122.4194, timestamp=1_700_000_000)
+    cache_key = ("test-key", "http://dawarich.test")
+    monkeypatch.setattr(
+        hooks,
+        "_LATEST_FIX_CACHE",
+        {
+            cache_key: hooks._LatestFixCacheEntry(
+                fetched_at_monotonic=time.monotonic() - hooks.LATEST_FIX_CACHE_TTL_SECONDS - 1.0,
+                fix=stale_fix,
+            )
+        },
+    )
+    monkeypatch.setattr(hooks, "FETCH_DEADLINE_SECONDS", 0.02)
+    monkeypatch.setattr(hooks.httpx, "AsyncClient", _SlowAsyncClient)
+
+    result = await hooks.fetch_latest_fix("test-key", dawarich_url="http://dawarich.test")
+
+    assert result == stale_fix
+
+
+@pytest.mark.asyncio
+async def test_hook_returns_empty_when_fetch_misses_deadline_without_cache(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Without a cached fix, exceeding the fetch deadline should log a warning and return []."""
+    monkeypatch.setattr(hooks, "_LATEST_FIX_CACHE", {})
+    monkeypatch.setenv("DAWARICH_API_KEY", "test-key")
+    monkeypatch.setattr(hooks, "FETCH_DEADLINE_SECONDS", 0.02)
+    monkeypatch.setattr(hooks.httpx, "AsyncClient", _SlowAsyncClient)
+    logger = MagicMock()
+    ctx = SimpleNamespace(settings={}, correlation_id="corr-1", logger=logger)
+
+    assert await hooks.location_enrich(ctx) == []
+    logger.warning.assert_called_once()

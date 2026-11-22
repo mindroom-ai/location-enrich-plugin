@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import math
 import os
 import time
@@ -24,6 +25,7 @@ from mindroom.plugin_api import (
 DEFAULT_DAWARICH_URL = "http://localhost:3000"
 DEFAULT_PLACES_PATH = Path.home() / ".mindroom/plugins/location-enrich/places.yaml"
 HTTP_TIMEOUT_SECONDS = 1.0
+FETCH_DEADLINE_SECONDS = 0.9
 LATEST_FIX_CACHE_TTL_SECONDS = 15.0
 STALE_AFTER_SECONDS = 30 * 60
 NEARBY_THRESHOLD_M = 500.0
@@ -299,10 +301,10 @@ async def fetch_latest_fix(api_key: str, *, dawarich_url: str = DEFAULT_DAWARICH
 
     url = f"{dawarich_url.rstrip('/')}/api/v1/points"
     try:
-        async with httpx.AsyncClient(timeout=HTTP_TIMEOUT_SECONDS) as client:
+        async with asyncio.timeout(FETCH_DEADLINE_SECONDS), httpx.AsyncClient(timeout=HTTP_TIMEOUT_SECONDS) as client:
             response = await client.get(url, params={"api_key": api_key, "per_page": 1})
             response.raise_for_status()
-    except (httpx.HTTPError, ValueError):
+    except (httpx.HTTPError, TimeoutError, ValueError):
         if cached is not None and cached.fix is not None:
             return cached.fix
         raise
@@ -326,7 +328,7 @@ async def location_enrich(ctx: MessageEnrichContext) -> list[EnrichmentItem]:
 
     try:
         fix = await fetch_latest_fix(api_key, dawarich_url=dawarich_url)
-    except (httpx.HTTPError, ValueError) as exc:
+    except (httpx.HTTPError, TimeoutError, ValueError) as exc:
         ctx.logger.warning("Failed to fetch Dawarich location", error=str(exc), correlation_id=ctx.correlation_id)
         return []
 
