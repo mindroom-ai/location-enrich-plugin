@@ -14,8 +14,12 @@ import httpx
 import yaml
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
 
-from mindroom.constants import resolve_config_relative_path
-from mindroom.hooks import EnrichmentItem, MessageEnrichContext, hook
+from mindroom.plugin_api import (
+    EnrichmentItem,
+    MessageEnrichContext,
+    hook,
+    resolve_config_relative_path,
+)
 
 DEFAULT_DAWARICH_URL = "http://localhost:3000"
 DEFAULT_PLACES_PATH = Path.home() / ".mindroom/plugins/location-enrich/places.yaml"
