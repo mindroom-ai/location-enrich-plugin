@@ -329,7 +329,11 @@ async def location_enrich(ctx: MessageEnrichContext) -> list[EnrichmentItem]:
     try:
         fix = await fetch_latest_fix(api_key, dawarich_url=dawarich_url)
     except (httpx.HTTPError, TimeoutError, ValueError) as exc:
-        ctx.logger.warning("Failed to fetch Dawarich location", error=str(exc), correlation_id=ctx.correlation_id)
+        ctx.logger.warning(
+            "Failed to fetch Dawarich location",
+            error=str(exc) or type(exc).__name__,
+            correlation_id=ctx.correlation_id,
+        )
         return []
 
     if fix is None:
