@@ -52,7 +52,7 @@ plugins:
 Note that `places_path` defaults to `~/.mindroom/plugins/location-enrich/places.yaml` (without the `-plugin` suffix) — either place your known-places file there or set `places_path` explicitly (relative paths resolve against your MindRoom config directory).
 
 Update later with `mindroom plugins update location-enrich-plugin`.
-Requires MindRoom plugin API 1.0 or later.
+Needs MindRoom v2026.11.180 or later (plugin API 1.0).
 
 ## Settings
 
@@ -109,22 +109,6 @@ locations:
    - `>= 40.0 m/s`: `highway` (adds voice-first, short-text suggestion)
 6. Fixes older than `30` minutes (`location_age_seconds > 1800`) switch to stale mode: `status: stale` with a staleness note, omitting `velocity_mps`, `movement_state`, `altitude_m`, and `suggestion`.
 7. The hook emits one `location` enrichment item with `persist=False` (transient context for the current turn only, not saved onto the stored user message) and `minimal_required=True`.
-
-</details>
-
-<details>
-<summary><b>Manual install</b></summary>
-
-`mindroom plugins install` pins the installed commit in `.mindroom-plugin.lock.json` and validates the plugin before activating it. To install from a manual checkout instead:
-
-1. Clone or copy this repository into `~/.mindroom/plugins/location-enrich-plugin`.
-2. Set `DAWARICH_API_KEY` in MindRoom's environment.
-3. Add the plugin to `config.yaml`:
-   ```yaml
-   plugins:
-     - path: ~/.mindroom/plugins/location-enrich-plugin
-   ```
-4. Restart MindRoom.
 
 </details>
 
