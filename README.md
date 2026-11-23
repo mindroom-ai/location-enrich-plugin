@@ -15,7 +15,7 @@ A [MindRoom](https://github.com/mindroom-ai/mindroom) hook plugin that adds real
 - **Movement-aware replies:** classifies speed (`stationary`, `walking`, `jogging`, `cycling`, `driving`, `highway`) and adds concise-reply guidance while walking or voice-first guidance while driving.
 - **Known places:** matches GPS coordinates against a local YAML list of named places (`Home`, `Office`, etc.) and reports `nearby_place`, `at_home`, and `distance_from_home_m`.
 - **Stale-fix protection:** flags fixes older than 30 minutes as `stale` and drops live movement hints so agents do not act on outdated coordinates.
-- **Fast and fail-open:** caches the latest fix for 15 seconds, reuses it on transient errors, and stays silent when `DAWARICH_API_KEY` is unset or Dawarich is unreachable.
+- **Fast and fail-open:** stays silent when `DAWARICH_API_KEY` is unset, caches the latest fix for 15 seconds, and if Dawarich is unreachable reuses the last cached fix when one exists (staying silent when none is available).
 
 On each incoming message, the plugin injects a transient `location` enrichment block for the model:
 
@@ -122,7 +122,7 @@ locations:
 3. Add the plugin to `config.yaml`:
    ```yaml
    plugins:
-     - path: plugins/location-enrich-plugin
+     - path: ~/.mindroom/plugins/location-enrich-plugin
    ```
 4. Restart MindRoom.
 
