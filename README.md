@@ -1,6 +1,7 @@
 # Location Enrich
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![CI](https://github.com/mindroom-ai/location-enrich-plugin/actions/workflows/plugin-ci.yml/badge.svg)](https://github.com/mindroom-ai/location-enrich-plugin/actions/workflows/plugin-ci.yml)
 [![Docs](https://img.shields.io/badge/docs-plugins-blue)](https://docs.mindroom.chat/plugins/)
 [![Hooks](https://img.shields.io/badge/docs-hooks-blue)](https://docs.mindroom.chat/hooks/)
 
@@ -9,113 +10,126 @@
   <img src="https://raw.githubusercontent.com/mindroom-ai/mindroom/main/assets/logo/logo-mark.svg" alt="MindRoom Logo" align="right" width="120" />
 </picture>
 
-Enrich [MindRoom](https://github.com/mindroom-ai/mindroom) agent prompts with real-time location context from [Dawarich](https://dawarich.app/).
+A [MindRoom](https://github.com/mindroom-ai/mindroom) hook plugin that adds real-time location context from [Dawarich](https://dawarich.app/) to agent prompts, so agents know where you are and whether you are stationary, walking, or driving.
 
-Agents see where the user is, how recent that fix is, whether it matches a known place, and whether they appear to be walking or driving. That lets the model adapt its behavior: shorter replies while in motion, voice-first when driving, and location-aware reasoning at home or other named places.
+- **Movement-aware replies:** classifies speed (`stationary`, `walking`, `jogging`, `cycling`, `driving`, `highway`) and adds concise-reply guidance while walking or voice-first guidance while driving.
+- **Known places:** matches GPS coordinates against a local YAML list of named places (`Home`, `Office`, etc.) and reports `nearby_place`, `at_home`, and `distance_from_home_m`.
+- **Stale-fix protection:** flags fixes older than 30 minutes as `stale` and drops live movement hints so agents do not act on outdated coordinates.
+- **Fast and fail-open:** stays silent when `DAWARICH_API_KEY` is unset, caches the latest fix for 15 seconds, and if Dawarich is unreachable reuses the last cached fix when one exists (staying silent when none is available).
 
-## Features
+On each incoming message, the plugin injects a transient `location` enrichment block for the model:
 
-- Fetches the latest Dawarich point on every `message:enrich`
-- Matches coordinates against a YAML file of known places
-- Classifies movement as `stationary`, `walking`, `jogging`, `cycling`, `driving`, or `highway`
-- Adds `nearby_place`, `at_home`, `distance_from_home_m`, `location_age_seconds`, and altitude when available
-- Marks location data as stale after 30 minutes and warns the model that it may be outdated
-- Adds concise reply guidance when the user appears to be driving or walking
-- Caches the latest successful fix for 15 seconds and reuses it on transient fetch failures
-
-## How It Works
-
-1. The `location-enrich` hook runs on every `message:enrich`.
-2. It fetches the latest GPS fix from Dawarich using `DAWARICH_API_KEY`.
-3. The fix is compared against a local YAML file of known places such as home, office, or gym.
-4. The plugin injects a compact location summary into the prompt for the active turn.
-   The summary is transient context for the current turn and is not appended to the stored user message.
-5. If the fix is stale, the plugin marks it as stale instead of presenting it as live context.
-
-## Hooks
-
-| Hook | Event | Purpose |
-|------|-------|---------|
-| `location-enrich` | `message:enrich` | Fetch the latest Dawarich point and inject location context into the prompt |
-
-## Configuration
-
-Set these environment variables:
-
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `DAWARICH_API_KEY` | Yes | API key for your Dawarich instance |
-| `DAWARICH_URL` | No | Dawarich base URL. Defaults to `http://localhost:3000` |
-
-You can also configure plugin settings in `config.yaml`:
-
-```yaml
-plugins:
-  - path: plugins/location-enrich
-    settings:
-      dawarich_url: "https://your-dawarich-instance.example.com"
-      places_path: "path/to/places.yaml"
+```text
+status: fresh
+latitude: 37.7749
+longitude: -122.4194
+velocity_mps: 1.4
+movement_state: walking
+nearby_place: Home
+at_home: true
+location_age_seconds: 12
+altitude_m: 16
+distance_from_home_m: 18
+suggestion: User appears to be walking - keep replies concise
 ```
 
-Supported plugin settings:
-
-| Setting | Required | Description |
-|---------|----------|-------------|
-| `dawarich_url` | No | Overrides the Dawarich base URL |
-| `places_path` | No | Path to the YAML known-places file |
-| `known_places_path` | No | Alias for `places_path` |
-
-Relative place-file paths are resolved against the active MindRoom config location. The default place-file path is `~/.mindroom/plugins/location-enrich/places.yaml`.
-
-### Known Places File
-
-Create a YAML file with your known locations:
-
-```yaml
-- name: Home
-  latitude: 47.6062
-  longitude: -122.3321
-- name: Office
-  latitude: 47.6205
-  longitude: -122.3493
-```
-
-Each entry may also use `label` instead of `name`, and `lat` / `lon` instead of `latitude` / `longitude`.
-
-## Install
-
-Vendor this plugin with the MindRoom CLI:
+## Quick start
 
 ```bash
 mindroom plugins install location-enrich-plugin
 ```
 
-Then reference it from `config.yaml`:
+Set `DAWARICH_API_KEY` in MindRoom's environment, then add the plugin to `config.yaml`:
 
 ```yaml
 plugins:
   - path: plugins/location-enrich-plugin
+    settings:
+      dawarich_url: "https://dawarich.example.com"  # optional; defaults to DAWARICH_URL or http://localhost:3000
+      places_path: "places.yaml"                    # optional; defaults to ~/.mindroom/plugins/location-enrich/places.yaml
 ```
 
-Update to the latest commit later with:
+Note that `places_path` defaults to `~/.mindroom/plugins/location-enrich/places.yaml` (without the `-plugin` suffix) — either place your known-places file there or set `places_path` explicitly (relative paths resolve against your MindRoom config directory).
 
-```bash
-mindroom plugins update location-enrich-plugin
+Update later with `mindroom plugins update location-enrich-plugin`.
+Requires MindRoom plugin API 1.0 or later.
+
+## Settings
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `DAWARICH_API_KEY` (env) | required | Dawarich API key. If unset or blank, the hook is a silent no-op and makes no network requests. |
+| `dawarich_url` (`DAWARICH_URL` env) | `http://localhost:3000` | Dawarich base URL. Precedence: `dawarich_url` > `DAWARICH_URL` > `http://localhost:3000`. |
+| `places_path` (alias: `known_places_path`) | `~/.mindroom/plugins/location-enrich/places.yaml` | Known-places YAML file. Precedence: `places_path` > `known_places_path` > default path. Relative paths resolve against the active MindRoom config location. |
+
+No agent tools are required; this plugin is hooks-only.
+
+<details>
+<summary><b>Known places file</b></summary>
+
+Define your known locations as a bare YAML list:
+
+```yaml
+- name: Home
+  latitude: 37.7749
+  longitude: -122.4194
+- name: Office
+  latitude: 37.7897
+  longitude: -122.4014
 ```
 
-The command pins the exact installed commit in `.mindroom-plugin.lock.json` and strictly validates the plugin before activating it.
-For a manual checkout instead, see Setup below.
+You can also wrap the list under a top-level `locations:` key, and use `label` instead of `name` or `lat` / `lon` instead of `latitude` / `longitude`:
 
-## Setup
+```yaml
+locations:
+  - label: Home
+    lat: 37.7749
+    lon: -122.4194
+```
 
-1. Copy this plugin to `~/.mindroom/plugins/location-enrich`.
-2. Set the `DAWARICH_API_KEY` environment variable.
-3. Create a `places.yaml` file with your known locations.
-4. Add the plugin to `config.yaml`:
+- An entry named `Home` (case-insensitive) enables `at_home` and `distance_from_home_m`.
+- Invalid entries are skipped; a missing or unreadable file falls back to an empty list.
+- The file is cached in memory and reloaded automatically when its modification time changes.
+
+</details>
+
+<details>
+<summary><b>How it works</b></summary>
+
+1. If `DAWARICH_API_KEY` is missing or blank, the hook returns immediately with no I/O.
+2. Otherwise, it fetches `GET <dawarich_url>/api/v1/points?per_page=1` with `api_key` under a `0.9 s` deadline (`1.0 s` HTTP timeout, `1200 ms` hook timeout).
+3. The latest fix is cached per `(api_key, dawarich_url)` for `15 s`. On transient network errors or timeouts, the hook reuses the last cached fix if one exists; otherwise it logs a warning and returns no enrichment.
+4. Distances are computed with the haversine formula: the closest known place within `500 m` sets `nearby_place` (otherwise `unknown`), and being within `200 m` of `Home` sets `at_home: true`.
+5. For fixes up to `30` minutes old (`location_age_seconds <= 1800`), movement is classified from `velocity_mps`:
+   - `< 0.5 m/s`: `stationary`
+   - `< 2.0 m/s`: `walking` (adds concise-reply suggestion)
+   - `< 5.0 m/s`: `jogging` (adds concise-reply suggestion)
+   - `< 15.0 m/s`: `cycling`
+   - `< 40.0 m/s`: `driving` (adds voice-first, short-text suggestion)
+   - `>= 40.0 m/s`: `highway` (adds voice-first, short-text suggestion)
+6. Fixes older than `30` minutes (`location_age_seconds > 1800`) switch to stale mode: `status: stale` with a staleness note, omitting `velocity_mps`, `movement_state`, `altitude_m`, and `suggestion`.
+7. The hook emits one `location` enrichment item with `persist=False` (transient context for the current turn only, not saved onto the stored user message) and `minimal_required=True`.
+
+</details>
+
+<details>
+<summary><b>Manual install</b></summary>
+
+`mindroom plugins install` pins the installed commit in `.mindroom-plugin.lock.json` and validates the plugin before activating it. To install from a manual checkout instead:
+
+1. Clone or copy this repository into `~/.mindroom/plugins/location-enrich-plugin`.
+2. Set `DAWARICH_API_KEY` in MindRoom's environment.
+3. Add the plugin to `config.yaml`:
    ```yaml
    plugins:
-     - path: plugins/location-enrich
+     - path: ~/.mindroom/plugins/location-enrich-plugin
    ```
-5. Restart MindRoom.
+4. Restart MindRoom.
 
-No agent tools are required. This plugin is hooks-only.
+</details>
+
+## Hooks
+
+| Hook | Event | Purpose |
+|------|-------|---------|
+| `location-enrich` | `message:enrich` | Fetch the latest Dawarich point and inject transient `location` context into the prompt |
